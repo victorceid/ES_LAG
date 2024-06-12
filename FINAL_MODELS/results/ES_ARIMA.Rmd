@@ -1,0 +1,852 @@
+---
+title: "ENSEMBLES OF ARIMA AND ARIMAX MODELS FOR FLU FORECASTING"
+author: "Victor Felix"
+date: "2024-06-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library("tidyr")
+library("MMWRweek")
+library("data.table")
+library("caret")
+library("purrr")
+library("dplyr")
+library("tseries")
+library("gtools")
+library("forecast")
+library("scoringutils")
+library("covidHubUtils")
+library("parallel")
+library("future")#https://cran.r-project.org/web/packages/future/vignettes/future-4-issues.html
+library("listenv")
+library("epitools")
+library("ggplot2")
+library("sf")
+```
+
+in the document. You can embed an R code chunk like this:
+
+```{r}
+load("ARIMA_MODELS.Rdata")
+load("ADJACENT_MODELS_LAG1.Rdata")
+load("TEMPERATURE_MODELS_LAG1.Rdata")
+load("EPIWEEK_MODELS_LAG1.Rdata")
+```
+
+SAVE AS FUNCTIONS LATER
+
+```{r}
+
+# Define the function
+calculate_mean_abs_error <- function(state_list) {
+  # Get the number of states in the list
+  num_states <- length(state_list)
+  
+  # Initialize vectors to store state names and mean values
+  state_names <- vector("character", length = num_states)
+  mean_values <- vector("numeric", length = num_states)
+  
+  # Iterate through the states
+  for (state in 1:num_states) {
+    # Get the name of the state
+    state_name <- names(state_list)[state]
+    
+    # Get the mean WIS value for the state
+    mean_abs_error <- mean(state_list[[state]]$abs_error)
+    
+    # Store the state name and mean value in the vectors
+    state_names[state] <- state_name
+    mean_values[state] <- mean_abs_error
+  }
+  
+  # Create a data frame
+  results_df <- data.frame(State = state_names, Mean_abs_error = mean_values)
+  
+  # Return the data frame
+  return(results_df)
+}
+#calculate_mean_abs_error
+# Define the function
+calculate_mean_wis <- function(state_list) {
+  # Capture the name of the input list
+  list_name <- deparse(substitute(state_list))
+  
+  # Get the number of states in the list
+  num_states <- length(state_list)
+  
+  # Initialize vectors to store state names and mean values
+  state_names <- vector("character", length = num_states)
+  mean_values <- vector("numeric", length = num_states)
+  
+  # Iterate through the states
+  for (state in 1:num_states) {
+    # Get the name of the state
+    state_name <- names(state_list)[state]
+    
+    # Get the mean WIS value for the state
+    mean_wis <- mean(state_list[[state]]$WIS, na.rm = TRUE)  # Use na.rm = TRUE to handle NA values
+    
+    # Store the state name and mean value in the vectors
+    state_names[state] <- state_name
+    mean_values[state] <- mean_wis
+  }
+  
+  # Create a data frame with a dynamic column name
+  results_df <- data.frame(State = state_names)
+  results_df[[list_name]] <- mean_values
+  
+  # Return the data frame
+  return(results_df)
+}
+
+# Define the function
+calculate_mean_N_of_models <- function(state_list) {
+  # Get the number of states in the list
+  num_states <- length(state_list)
+  
+  # Initialize vectors to store state names and mean values
+  state_names <- vector("character", length = num_states)
+  mean_values <- vector("numeric", length = num_states)
+  
+  # Iterate through the states
+  for (state in 1:num_states) {
+    # Get the name of the state
+    state_name <- names(state_list)[state]
+    
+    # Get the mean WIS value for the state
+    mean_Number_of_models <- mean(state_list[[state]]$Number_of_models)
+    
+    # Store the state name and mean value in the vectors
+    state_names[state] <- state_name
+    mean_values[state] <- mean_Number_of_models
+  }
+  
+  # Create a data frame
+  results_df <- data.frame(State = state_names, Mean_Number_of_models = mean_values)
+  
+  # Return the data frame
+  return(results_df)
+}
+
+
+
+```
+
+COMPARING WIS RESULTS FOR WEEK1
+
+```{r}
+W1<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W1 <- calculate_mean_wis(AUTO_ARIMA_WEEK1_list)
+ES27_AR_W1 <- calculate_mean_wis(ES27_ARIMA_WEEK1_list)
+ES64_AR_W1 <- calculate_mean_wis(ES64_ARIMA_WEEK1_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W1 <- calculate_mean_wis(AUTO_ADJACENT_WEEK1_list)
+ES27_ADJ_W1 <- calculate_mean_wis(ES27_ADJACENT_WEEK1_list)
+ES64_ADJ_W1 <- calculate_mean_wis(ES64_ADJACENT_WEEK1_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W1 <- calculate_mean_wis(AUTO_TEMPERATURE_WEEK1_list)
+ES27_TMP_W1 <- calculate_mean_wis(ES27_TEMPERATURE_WEEK1_list)
+ES64_TMP_W1 <- calculate_mean_wis(ES64_TEMPERATURE_WEEK1_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W1 <- calculate_mean_wis(AUTO_EPIWEEK_WEEK1_list)
+ES27_EPI_W1 <- calculate_mean_wis(ES27_EPIWEEK_WEEK1_list)
+ES64_EPI_W1 <- calculate_mean_wis(ES64_EPIWEEK_WEEK1_list)
+
+# AUTO ARIMA RESULTS
+W1 <- merge(AUTO_AR_W1, ES27_AR_W1, by = "State")
+W1 <- merge(W1, ES64_AR_W1, by = "State")
+# ADJACENT ARIMAX RESULTS
+W1 <- merge(W1, AUTO_ADJ_W1, by = "State")
+W1 <- merge(W1, ES27_ADJ_W1, by = "State")
+W1 <- merge(W1, ES64_ADJ_W1, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W1 <- merge(W1, AUTO_TMP_W1, by = "State")
+W1 <- merge(W1, ES27_TMP_W1, by = "State")
+W1 <- merge(W1, ES64_TMP_W1, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W1 <- merge(W1, AUTO_EPI_W1, by = "State")
+W1 <- merge(W1, ES27_EPI_W1, by = "State")
+W1 <- merge(W1, ES64_EPI_W1, by = "State")
+
+# Rename columns for clarity
+colnames(W1)[1] <- "NAME"
+colnames(W1)[2] <- "AUTO_AR"
+colnames(W1)[3] <- "ES27_AR"
+colnames(W1)[4] <- "ES64_AR"
+colnames(W1)[5] <- "AUTO_ADJ"
+colnames(W1)[6] <- "ES27_ADJ"
+colnames(W1)[7] <- "ES64_ADJ"
+colnames(W1)[8] <- "AUTO_TMP"
+colnames(W1)[9] <- "ES27_TMP"
+colnames(W1)[10] <- "ES64_TMP"
+colnames(W1)[11] <- "AUTO_EPI"
+colnames(W1)[12] <- "ES27_EPI"
+colnames(W1)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W1$Best_Result <- apply(W1[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W1$Best_Result <- apply(W1[, 2:13], 1, function(x) {
+#  colnames(W1)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W1)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W1,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") #+ scale_x_discrete()
+```
+
+WEEK 2
+
+```{r}
+W2<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W2 <- calculate_mean_wis(AUTO_ARIMA_WEEK2_list)
+ES27_AR_W2 <- calculate_mean_wis(ES27_ARIMA_WEEK2_list)
+ES64_AR_W2 <- calculate_mean_wis(ES64_ARIMA_WEEK2_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W2 <- calculate_mean_wis(AUTO_ADJACENT_WEEK2_list)
+ES27_ADJ_W2 <- calculate_mean_wis(ES27_ADJACENT_WEEK2_list)
+ES64_ADJ_W2 <- calculate_mean_wis(ES64_ADJACENT_WEEK2_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W2 <- calculate_mean_wis(AUTO_TEMPERATURE_WEEK2_list)
+ES27_TMP_W2 <- calculate_mean_wis(ES27_TEMPERATURE_WEEK2_list)
+ES64_TMP_W2 <- calculate_mean_wis(ES64_TEMPERATURE_WEEK2_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W2 <- calculate_mean_wis(AUTO_EPIWEEK_WEEK2_list)
+ES27_EPI_W2 <- calculate_mean_wis(ES27_EPIWEEK_WEEK2_list)
+ES64_EPI_W2 <- calculate_mean_wis(ES64_EPIWEEK_WEEK2_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W2 <- merge(AUTO_AR_W2, ES27_AR_W2, by = "State")
+W2 <- merge(W2, ES64_AR_W2, by = "State")
+# ADJACENT ARIMAX RESULTS
+W2 <- merge(W2, AUTO_ADJ_W2, by = "State")
+W2 <- merge(W2, ES27_ADJ_W2, by = "State")
+W2 <- merge(W2, ES64_ADJ_W2, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W2 <- merge(W2, AUTO_TMP_W2, by = "State")
+W2 <- merge(W2, ES27_TMP_W2, by = "State")
+W2 <- merge(W2, ES64_TMP_W2, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W2 <- merge(W2, AUTO_EPI_W2, by = "State")
+W2 <- merge(W2, ES27_EPI_W2, by = "State")
+W2 <- merge(W2, ES64_EPI_W2, by = "State")
+
+# Rename columns for clarity
+colnames(W2)[1] <- "NAME"
+colnames(W2)[2] <- "AUTO_AR"
+colnames(W2)[3] <- "ES27_AR"
+colnames(W2)[4] <- "ES64_AR"
+colnames(W2)[5] <- "AUTO_ADJ"
+colnames(W2)[6] <- "ES27_ADJ"
+colnames(W2)[7] <- "ES64_ADJ"
+colnames(W2)[8] <- "AUTO_TMP"
+colnames(W2)[9] <- "ES27_TMP"
+colnames(W2)[10] <- "ES64_TMP"
+colnames(W2)[11] <- "AUTO_EPI"
+colnames(W2)[12] <- "ES27_EPI"
+colnames(W2)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W2$Best_Result <- apply(W2[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W2$Best_Result <- apply(W2[, 2:13], 1, function(x) {
+#  colnames(W2)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W2)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W2,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+WEEK 3
+
+```{r}
+W3<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W3 <- calculate_mean_wis(AUTO_ARIMA_WEEK3_list)
+ES27_AR_W3 <- calculate_mean_wis(ES27_ARIMA_WEEK3_list)
+ES64_AR_W3 <- calculate_mean_wis(ES64_ARIMA_WEEK3_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W3 <- calculate_mean_wis(AUTO_ADJACENT_WEEK3_list)
+ES27_ADJ_W3 <- calculate_mean_wis(ES27_ADJACENT_WEEK3_list)
+ES64_ADJ_W3 <- calculate_mean_wis(ES64_ADJACENT_WEEK3_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W3 <- calculate_mean_wis(AUTO_TEMPERATURE_WEEK3_list)
+ES27_TMP_W3 <- calculate_mean_wis(ES27_TEMPERATURE_WEEK3_list)
+ES64_TMP_W3 <- calculate_mean_wis(ES64_TEMPERATURE_WEEK3_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W3 <- calculate_mean_wis(AUTO_EPIWEEK_WEEK3_list)
+ES27_EPI_W3 <- calculate_mean_wis(ES27_EPIWEEK_WEEK3_list)
+ES64_EPI_W3 <- calculate_mean_wis(ES64_EPIWEEK_WEEK3_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W3 <- merge(AUTO_AR_W3, ES27_AR_W3, by = "State")
+W3 <- merge(W3, ES64_AR_W3, by = "State")
+# ADJACENT ARIMAX RESULTS
+W3 <- merge(W3, AUTO_ADJ_W3, by = "State")
+W3 <- merge(W3, ES27_ADJ_W3, by = "State")
+W3 <- merge(W3, ES64_ADJ_W3, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W3 <- merge(W3, AUTO_TMP_W3, by = "State")
+W3 <- merge(W3, ES27_TMP_W3, by = "State")
+W3 <- merge(W3, ES64_TMP_W3, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W3 <- merge(W3, AUTO_EPI_W3, by = "State")
+W3 <- merge(W3, ES27_EPI_W3, by = "State")
+W3 <- merge(W3, ES64_EPI_W3, by = "State")
+
+# Rename columns for clarity
+colnames(W3)[1] <- "NAME"
+colnames(W3)[2] <- "AUTO_AR"
+colnames(W3)[3] <- "ES27_AR"
+colnames(W3)[4] <- "ES64_AR"
+colnames(W3)[5] <- "AUTO_ADJ"
+colnames(W3)[6] <- "ES27_ADJ"
+colnames(W3)[7] <- "ES64_ADJ"
+colnames(W3)[8] <- "AUTO_TMP"
+colnames(W3)[9] <- "ES27_TMP"
+colnames(W3)[10] <- "ES64_TMP"
+colnames(W3)[11] <- "AUTO_EPI"
+colnames(W3)[12] <- "ES27_EPI"
+colnames(W3)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W3$Best_Result <- apply(W3[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W3$Best_Result <- apply(W3[, 2:13], 1, function(x) {
+#  colnames(W3)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W3)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W3,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+WEEK 4
+
+```{r}
+W4<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W4 <- calculate_mean_wis(AUTO_ARIMA_WEEK4_list)
+ES27_AR_W4 <- calculate_mean_wis(ES27_ARIMA_WEEK4_list)
+ES64_AR_W4 <- calculate_mean_wis(ES64_ARIMA_WEEK4_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W4 <- calculate_mean_wis(AUTO_ADJACENT_WEEK4_list)
+ES27_ADJ_W4 <- calculate_mean_wis(ES27_ADJACENT_WEEK4_list)
+ES64_ADJ_W4 <- calculate_mean_wis(ES64_ADJACENT_WEEK4_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W4 <- calculate_mean_wis(AUTO_TEMPERATURE_WEEK4_list)
+ES27_TMP_W4 <- calculate_mean_wis(ES27_TEMPERATURE_WEEK4_list)
+ES64_TMP_W4 <- calculate_mean_wis(ES64_TEMPERATURE_WEEK4_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W4 <- calculate_mean_wis(AUTO_EPIWEEK_WEEK4_list)
+ES27_EPI_W4 <- calculate_mean_wis(ES27_EPIWEEK_WEEK4_list)
+ES64_EPI_W4 <- calculate_mean_wis(ES64_EPIWEEK_WEEK4_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W4 <- merge(AUTO_AR_W4, ES27_AR_W4, by = "State")
+W4 <- merge(W4, ES64_AR_W4, by = "State")
+# ADJACENT ARIMAX RESULTS
+W4 <- merge(W4, AUTO_ADJ_W4, by = "State")
+W4 <- merge(W4, ES27_ADJ_W4, by = "State")
+W4 <- merge(W4, ES64_ADJ_W4, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W4 <- merge(W4, AUTO_TMP_W4, by = "State")
+W4 <- merge(W4, ES27_TMP_W4, by = "State")
+W4 <- merge(W4, ES64_TMP_W4, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W4 <- merge(W4, AUTO_EPI_W4, by = "State")
+W4 <- merge(W4, ES27_EPI_W4, by = "State")
+W4 <- merge(W4, ES64_EPI_W4, by = "State")
+
+# Rename columns for clarity
+colnames(W4)[1] <- "NAME"
+colnames(W4)[2] <- "AUTO_AR"
+colnames(W4)[3] <- "ES27_AR"
+colnames(W4)[4] <- "ES64_AR"
+colnames(W4)[5] <- "AUTO_ADJ"
+colnames(W4)[6] <- "ES27_ADJ"
+colnames(W4)[7] <- "ES64_ADJ"
+colnames(W4)[8] <- "AUTO_TMP"
+colnames(W4)[9] <- "ES27_TMP"
+colnames(W4)[10] <- "ES64_TMP"
+colnames(W4)[11] <- "AUTO_EPI"
+colnames(W4)[12] <- "ES27_EPI"
+colnames(W4)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+#W4$Best_Result <- apply(W4[,2:13], 1, function(x) {
+#  which.min(x)
+#})
+
+W4$Best_Result <- apply(W4[, 2:13], 1, function(x) {
+  colnames(W4)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+})
+
+# Print merged results
+head(W4)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W4,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+COMPARING WIS RESULTS FOR WEEK1
+
+```{r}
+###########################
+# WEEK1
+
+W1_<-NULL
+# AUTO ARIMA RESULTS
+AUTO_AR_W1_ <- calculate_mean_wis(AUTO_ARIMA_WEEK1_list)
+ES27_ADJ_W1_ <- calculate_mean_wis(ES27_ADJACENT_WEEK1_list)
+# AUTO ARIMA RESULTS
+W1_ <- merge(AUTO_AR_W1_, ES27_ADJ_W1_, by = "State")
+# Rename columns for clarity
+colnames(W1_)[1] <- "NAME"
+colnames(W1_)[2] <- "AUTO_AR"
+colnames(W1_)[3] <- "ES27_ADJ"
+
+###########################
+# WEEK2
+
+W2_<-NULL
+# AUTO ARIMA RESULTS
+AUTO_AR_W2_ <- calculate_mean_wis(AUTO_ARIMA_WEEK2_list)
+ES27_ADJ_W2_ <- calculate_mean_wis(ES27_ADJACENT_WEEK2_list)
+# AUTO ARIMA RESULTS
+W2_ <- merge(AUTO_AR_W2_, ES27_ADJ_W2_, by = "State")
+# Rename columns for clarity
+colnames(W2_)[1] <- "NAME"
+colnames(W2_)[2] <- "AUTO_AR"
+colnames(W2_)[3] <- "ES27_ADJ"
+
+###########################
+# WEEK3
+
+W3_<-NULL
+# AUTO ARIMA RESULTS
+AUTO_AR_W3_ <- calculate_mean_wis(AUTO_ARIMA_WEEK3_list)
+ES27_ADJ_W3_ <- calculate_mean_wis(ES27_ADJACENT_WEEK1_list)
+# AUTO ARIMA RESULTS
+W3_ <- merge(AUTO_AR_W3_, ES27_ADJ_W3_, by = "State")
+# Rename columns for clarity
+colnames(W3_)[1] <- "NAME"
+colnames(W3_)[2] <- "AUTO_AR"
+colnames(W3_)[3] <- "ES27_ADJ"
+
+###########################
+# WEEK4
+
+W4_<-NULL
+# AUTO ARIMA RESULTS
+AUTO_AR_W4_ <- calculate_mean_wis(AUTO_ARIMA_WEEK4_list)
+ES27_ADJ_W4_ <- calculate_mean_wis(ES27_ADJACENT_WEEK4_list)
+# AUTO ARIMA RESULTS
+W4_ <- merge(AUTO_AR_W4_, ES27_ADJ_W4_, by = "State")
+# Rename columns for clarity
+colnames(W4_)[1] <- "NAME"
+colnames(W4_)[2] <- "AUTO_AR"
+colnames(W4_)[3] <- "ES27_ADJ"
+
+# Improved WIS
+
+hist(W1_$AUTO_AR-W1_$ES27_ADJ, main="ES27 ADJ_STATES vs AUTO ARIMA (1 Week Ahead)", xlab = "Positive Values means Improved WIS")
+hist(W2_$AUTO_AR-W2_$ES27_ADJ, main="ES27 ADJ_STATES vs AUTO ARIMA (2 Weeks Ahead)", xlab = "Positive Values means Improved WIS")
+hist(W3_$AUTO_AR-W3_$ES27_ADJ, main="ES27 ADJ_STATES vs AUTO ARIMA (3 Weeks Ahead)", xlab = "Positive Values means Improved WIS")
+hist(W4_$AUTO_AR-W4_$ES27_ADJ, main="ES27 ADJ_STATES vs AUTO ARIMA (4 Weeks Ahead)", xlab = "Positive Values means Improved WIS")
+```
+
+```{r}
+#######################################################
+# MAPPING THE MEAN PERFORMANCE OF THE ES64, ES27      #
+# AND AUTO ARIMA MODELS FOR THE 50 STATES OF THE U.S. #
+# BASED ON THE SUMMARY RESULTS OF THE CURRENT MODELS. #
+#######################################################
+
+states <- read_sf("cb_2018_us_state_500k/cb_2018_us_state_500k.shp")
+
+#################################################
+# ES27 ARIMAX by ADJACENT STATES - 1 WEEK AHEAD #
+#################################################
+
+map_week1<-left_join(states, W1, by=join_by("NAME"))%>%
+  drop_na()
+
+ES_1WEEK<- ggplot(map_week1, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES - 1 WEEK AHEAD")
+
+x_limits <- c(-130, -65)  # Set the desired longitude range
+y_limits <- c(20, 55)    # Set the desired latitude range
+
+ES_1WEEK + coord_sf(xlim = x_limits, ylim = y_limits)
+
+###################################################
+# ES27 ARIMAX by ADJACENT STATES - 2 WEEKS AHEAD #
+#################################################
+
+map_week2<-left_join(states, W2, by=join_by("NAME"))%>%
+  drop_na()
+
+MAP_WEEK2<- ggplot(map_week2, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES - 2 WEEKS AHEAD")
+
+x_limits <- c(-130, -65)  # Set the desired longitude range
+y_limits <- c(20, 55)    # Set the desired latitude range
+
+MAP_WEEK2 + coord_sf(xlim = x_limits, ylim = y_limits)
+
+###################################################
+# ES27 ARIMAX by ADJACENT STATES - 3 WEEKS AHEAD #
+#################################################
+
+map_week3<-left_join(states, W3, by=join_by("NAME"))%>%
+  drop_na()
+
+MAP_WEEK3<- ggplot(map_week3, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES - 3 WEEKS AHEAD")
+
+x_limits <- c(-130, -65)  # Set the desired longitude range
+y_limits <- c(20, 55)    # Set the desired latitude range
+
+MAP_WEEK3 + coord_sf(xlim = x_limits, ylim = y_limits)  
+
+###################################################
+# ES27 ARIMAX by ADJACENT STATES - 4 WEEKS AHEAD #
+#################################################
+
+map_week4<-left_join(states, W4, by=join_by("NAME"))%>%
+  drop_na()
+
+MAP_WEEK4<- ggplot(map_week4, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES - 4 WEEKS AHEAD")
+
+x_limits <- c(-130, -65)  # Set the desired longitude range
+y_limits <- c(20, 55)    # Set the desired latitude range
+
+MAP_WEEK4 + coord_sf(xlim = x_limits, ylim = y_limits)  
+
+```
+
+COMPARING ABSOLUTE ERRORS RESULTS FOR WEEK1
+
+```{r}
+W1<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W1 <- calculate_mean_abs_error(AUTO_ARIMA_WEEK1_list)
+ES27_AR_W1 <- calculate_mean_abs_error(ES27_ARIMA_WEEK1_list)
+ES64_AR_W1 <- calculate_mean_abs_error(ES64_ARIMA_WEEK1_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W1 <- calculate_mean_abs_error(AUTO_ADJACENT_WEEK1_list)
+ES27_ADJ_W1 <- calculate_mean_abs_error(ES27_ADJACENT_WEEK1_list)
+ES64_ADJ_W1 <- calculate_mean_abs_error(ES64_ADJACENT_WEEK1_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W1 <- calculate_mean_abs_error(AUTO_TEMPERATURE_WEEK1_list)
+ES27_TMP_W1 <- calculate_mean_abs_error(ES27_TEMPERATURE_WEEK1_list)
+ES64_TMP_W1 <- calculate_mean_abs_error(ES64_TEMPERATURE_WEEK1_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W1 <- calculate_mean_abs_error(AUTO_EPIWEEK_WEEK1_list)
+ES27_EPI_W1 <- calculate_mean_abs_error(ES27_EPIWEEK_WEEK1_list)
+ES64_EPI_W1 <- calculate_mean_abs_error(ES64_EPIWEEK_WEEK1_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W1 <- merge(AUTO_AR_W1, ES27_AR_W1, by = "State")
+W1 <- merge(W1, ES64_AR_W1, by = "State")
+# ADJACENT ARIMAX RESULTS
+W1 <- merge(W1, AUTO_ADJ_W1, by = "State")
+W1 <- merge(W1, ES27_ADJ_W1, by = "State")
+W1 <- merge(W1, ES64_ADJ_W1, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W1 <- merge(W1, AUTO_TMP_W1, by = "State")
+W1 <- merge(W1, ES27_TMP_W1, by = "State")
+W1 <- merge(W1, ES64_TMP_W1, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W1 <- merge(W1, AUTO_EPI_W1, by = "State")
+W1 <- merge(W1, ES27_EPI_W1, by = "State")
+W1 <- merge(W1, ES64_EPI_W1, by = "State")
+
+# Rename columns for clarity
+colnames(W1)[1] <- "NAME"
+colnames(W1)[2] <- "AUTO_AR"
+colnames(W1)[3] <- "ES27_AR"
+colnames(W1)[4] <- "ES64_AR"
+colnames(W1)[5] <- "AUTO_ADJ"
+colnames(W1)[6] <- "ES27_ADJ"
+colnames(W1)[7] <- "ES64_ADJ"
+colnames(W1)[8] <- "AUTO_TMP"
+colnames(W1)[9] <- "ES27_TMP"
+colnames(W1)[10] <- "ES64_TMP"
+colnames(W1)[11] <- "AUTO_EPI"
+colnames(W1)[12] <- "ES27_EPI"
+colnames(W1)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W1$Best_Result <- apply(W1[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W1$Best_Result <- apply(W1[, 2:13], 1, function(x) {
+#  colnames(W1)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W1)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W1,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+COMPARING ABSOLUTE ERRORS RESULTS FOR WEEK2
+
+```{r}
+W2<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W2 <- calculate_mean_abs_error(AUTO_ARIMA_WEEK2_list)
+ES27_AR_W2 <- calculate_mean_abs_error(ES27_ARIMA_WEEK2_list)
+ES64_AR_W2 <- calculate_mean_abs_error(ES64_ARIMA_WEEK2_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W2 <- calculate_mean_abs_error(AUTO_ADJACENT_WEEK2_list)
+ES27_ADJ_W2 <- calculate_mean_abs_error(ES27_ADJACENT_WEEK2_list)
+ES64_ADJ_W2 <- calculate_mean_abs_error(ES64_ADJACENT_WEEK2_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W2 <- calculate_mean_abs_error(AUTO_TEMPERATURE_WEEK2_list)
+ES27_TMP_W2 <- calculate_mean_abs_error(ES27_TEMPERATURE_WEEK2_list)
+ES64_TMP_W2 <- calculate_mean_abs_error(ES64_TEMPERATURE_WEEK2_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W2 <- calculate_mean_abs_error(AUTO_EPIWEEK_WEEK2_list)
+ES27_EPI_W2 <- calculate_mean_abs_error(ES27_EPIWEEK_WEEK2_list)
+ES64_EPI_W2 <- calculate_mean_abs_error(ES64_EPIWEEK_WEEK2_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W2 <- merge(AUTO_AR_W2, ES27_AR_W2, by = "State")
+W2 <- merge(W2, ES64_AR_W2, by = "State")
+# ADJACENT ARIMAX RESULTS
+W2 <- merge(W2, AUTO_ADJ_W2, by = "State")
+W2 <- merge(W2, ES27_ADJ_W2, by = "State")
+W2 <- merge(W2, ES64_ADJ_W2, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W2 <- merge(W2, AUTO_TMP_W2, by = "State")
+W2 <- merge(W2, ES27_TMP_W2, by = "State")
+W2 <- merge(W2, ES64_TMP_W2, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W2 <- merge(W2, AUTO_EPI_W2, by = "State")
+W2 <- merge(W2, ES27_EPI_W2, by = "State")
+W2 <- merge(W2, ES64_EPI_W2, by = "State")
+
+# Rename columns for clarity
+colnames(W2)[1] <- "NAME"
+colnames(W2)[2] <- "AUTO_AR"
+colnames(W2)[3] <- "ES27_AR"
+colnames(W2)[4] <- "ES64_AR"
+colnames(W2)[5] <- "AUTO_ADJ"
+colnames(W2)[6] <- "ES27_ADJ"
+colnames(W2)[7] <- "ES64_ADJ"
+colnames(W2)[8] <- "AUTO_TMP"
+colnames(W2)[9] <- "ES27_TMP"
+colnames(W2)[10] <- "ES64_TMP"
+colnames(W2)[11] <- "AUTO_EPI"
+colnames(W2)[12] <- "ES27_EPI"
+colnames(W2)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W2$Best_Result <- apply(W2[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W2$Best_Result <- apply(W2[, 2:13], 1, function(x) {
+#  colnames(W2)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W2)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W2,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+COMPARING ABSOLUTE ERRORS RESULTS FOR WEEK3
+
+```{r}
+W3<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W3 <- calculate_mean_abs_error(AUTO_ARIMA_WEEK3_list)
+ES27_AR_W3 <- calculate_mean_abs_error(ES27_ARIMA_WEEK3_list)
+ES64_AR_W3 <- calculate_mean_abs_error(ES64_ARIMA_WEEK3_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W3 <- calculate_mean_abs_error(AUTO_ADJACENT_WEEK3_list)
+ES27_ADJ_W3 <- calculate_mean_abs_error(ES27_ADJACENT_WEEK3_list)
+ES64_ADJ_W3 <- calculate_mean_abs_error(ES64_ADJACENT_WEEK3_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W3 <- calculate_mean_abs_error(AUTO_TEMPERATURE_WEEK3_list)
+ES27_TMP_W3 <- calculate_mean_abs_error(ES27_TEMPERATURE_WEEK3_list)
+ES64_TMP_W3 <- calculate_mean_abs_error(ES64_TEMPERATURE_WEEK3_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W3 <- calculate_mean_abs_error(AUTO_EPIWEEK_WEEK3_list)
+ES27_EPI_W3 <- calculate_mean_abs_error(ES27_EPIWEEK_WEEK3_list)
+ES64_EPI_W3 <- calculate_mean_abs_error(ES64_EPIWEEK_WEEK3_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W3 <- merge(AUTO_AR_W3, ES27_AR_W3, by = "State")
+W3 <- merge(W3, ES64_AR_W3, by = "State")
+# ADJACENT ARIMAX RESULTS
+W3 <- merge(W3, AUTO_ADJ_W3, by = "State")
+W3 <- merge(W3, ES27_ADJ_W3, by = "State")
+W3 <- merge(W3, ES64_ADJ_W3, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W3 <- merge(W3, AUTO_TMP_W3, by = "State")
+W3 <- merge(W3, ES27_TMP_W3, by = "State")
+W3 <- merge(W3, ES64_TMP_W3, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W3 <- merge(W3, AUTO_EPI_W3, by = "State")
+W3 <- merge(W3, ES27_EPI_W3, by = "State")
+W3 <- merge(W3, ES64_EPI_W3, by = "State")
+
+# Rename columns for clarity
+colnames(W3)[1] <- "NAME"
+colnames(W3)[2] <- "AUTO_AR"
+colnames(W3)[3] <- "ES27_AR"
+colnames(W3)[4] <- "ES64_AR"
+colnames(W3)[5] <- "AUTO_ADJ"
+colnames(W3)[6] <- "ES27_ADJ"
+colnames(W3)[7] <- "ES64_ADJ"
+colnames(W3)[8] <- "AUTO_TMP"
+colnames(W3)[9] <- "ES27_TMP"
+colnames(W3)[10] <- "ES64_TMP"
+colnames(W3)[11] <- "AUTO_EPI"
+colnames(W3)[12] <- "ES27_EPI"
+colnames(W3)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+invisible(W3$Best_Result <- apply(W3[,2:13], 1, function(x) {
+  which.min(x)
+}))
+
+#W3$Best_Result <- apply(W3[, 2:13], 1, function(x) {
+#  colnames(W3)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W3)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W3,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
+COMPARING ABSOLUTE ERRORS RESULTS FOR WEEK4
+
+```{r}
+W4<-NULL
+
+# AUTO ARIMA RESULTS
+AUTO_AR_W4 <- calculate_mean_abs_error(AUTO_ARIMA_WEEK4_list)
+ES27_AR_W4 <- calculate_mean_abs_error(ES27_ARIMA_WEEK4_list)
+ES64_AR_W4 <- calculate_mean_abs_error(ES64_ARIMA_WEEK4_list)
+# ADJACENT ARIMAX RESULTS
+AUTO_ADJ_W4 <- calculate_mean_abs_error(AUTO_ADJACENT_WEEK4_list)
+ES27_ADJ_W4 <- calculate_mean_abs_error(ES27_ADJACENT_WEEK4_list)
+ES64_ADJ_W4 <- calculate_mean_abs_error(ES64_ADJACENT_WEEK4_list)
+# TEMPERATURE ARIMAX RESULTS
+AUTO_TMP_W4 <- calculate_mean_abs_error(AUTO_TEMPERATURE_WEEK4_list)
+ES27_TMP_W4 <- calculate_mean_abs_error(ES27_TEMPERATURE_WEEK4_list)
+ES64_TMP_W4 <- calculate_mean_abs_error(ES64_TEMPERATURE_WEEK4_list)
+# EPIWEEK ARIMAX RESULTS
+AUTO_EPI_W4 <- calculate_mean_abs_error(AUTO_EPIWEEK_WEEK4_list)
+ES27_EPI_W4 <- calculate_mean_abs_error(ES27_EPIWEEK_WEEK4_list)
+ES64_EPI_W4 <- calculate_mean_abs_error(ES64_EPIWEEK_WEEK4_list)
+
+# MERGE
+# AUTO ARIMA RESULTS
+W4 <- merge(AUTO_AR_W4, ES27_AR_W4, by = "State")
+W4 <- merge(W4, ES64_AR_W4, by = "State")
+# ADJACENT ARIMAX RESULTS
+W4 <- merge(W4, AUTO_ADJ_W4, by = "State")
+W4 <- merge(W4, ES27_ADJ_W4, by = "State")
+W4 <- merge(W4, ES64_ADJ_W4, by = "State")
+# TEMPERATURE ARIMAX RESULTS
+W4 <- merge(W4, AUTO_TMP_W4, by = "State")
+W4 <- merge(W4, ES27_TMP_W4, by = "State")
+W4 <- merge(W4, ES64_TMP_W4, by = "State")
+# EPIWEEK ARIMAX RESULTS
+W4 <- merge(W4, AUTO_EPI_W4, by = "State")
+W4 <- merge(W4, ES27_EPI_W4, by = "State")
+W4 <- merge(W4, ES64_EPI_W4, by = "State")
+
+# Rename columns for clarity
+colnames(W4)[1] <- "NAME"
+colnames(W4)[2] <- "AUTO_AR"
+colnames(W4)[3] <- "ES27_AR"
+colnames(W4)[4] <- "ES64_AR"
+colnames(W4)[5] <- "AUTO_ADJ"
+colnames(W4)[6] <- "ES27_ADJ"
+colnames(W4)[7] <- "ES64_ADJ"
+colnames(W4)[8] <- "AUTO_TMP"
+colnames(W4)[9] <- "ES27_TMP"
+colnames(W4)[10] <- "ES64_TMP"
+colnames(W4)[11] <- "AUTO_EPI"
+colnames(W4)[12] <- "ES27_EPI"
+colnames(W4)[13] <- "ES64_EPI"
+
+# Identify the best result for each state
+W4$Best_Result <- apply(W4[,2:13], 1, function(x) {
+  which.min(x)
+})
+
+#W4$Best_Result <- apply(W4[, 2:13], 1, function(x) {
+#  colnames(W4)[which.min(x) + 1]  # +1 to shift the index to account for column 1
+#})
+
+# Print merged results
+head(W4)
+
+# --------- WEEK1 MODELS ------------- #
+ggplot(W4,aes(x=Best_Result)) + geom_bar()+
+  labs(title = "Week 1",
+       x = "BEST MODELS", y="Number of Models") 
+```
+
