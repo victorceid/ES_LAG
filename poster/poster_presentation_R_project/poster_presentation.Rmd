@@ -37,18 +37,15 @@ library("forcats")
 LOADING DATA
 
 ```{r}
-load("ARIMA_MODELS.Rdata")
-load("ADJACENT_MODELS_LAG1.Rdata")
-load("TEMPERATURE_MODELS_LAG1.Rdata")
-load("EPIWEEK_MODELS_LAG1.Rdata")
+load("ARIMA_MODELS_correct.Rdata")
+load("ADJACENT_MODELS_correct.Rdata")
+load("TEMPERATURE_MODELS_correct.Rdata")
+load("EPIWEEK_MODELS_correct.Rdata")
 ```
 
 *SAVE AS FUNCTIONS LATER
 
 ```{r}
-
-#calculate_mean_abs_error
-# Define the function
 calculate_mean_wis <- function(state_list) {
   # Capture the name of the input list
   list_name <- deparse(substitute(state_list))
@@ -464,7 +461,7 @@ states <- read_sf("cb_2018_us_state_500k/cb_2018_us_state_500k.shp")
 map_week1<-left_join(states, W1, by=join_by("NAME"))%>%
   drop_na()
 
-ES_1WEEK<- ggplot(map_week1, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (1 WEEK AHEAD)")
+ES_1WEEK<- ggplot(map_week1, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (1 WEEK AHEAD)")
 
 x_limits <- c(-130, -65)  # Set the desired longitude range
 y_limits <- c(20, 55)    # Set the desired latitude range
@@ -478,7 +475,7 @@ ES_1WEEK + coord_sf(xlim = x_limits, ylim = y_limits)
 map_week2<-left_join(states, W2, by=join_by("NAME"))%>%
   drop_na()
 
-MAP_WEEK2<- ggplot(map_week2, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (2 WEEKS AHEAD)")
+MAP_WEEK2<- ggplot(map_week2, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (2 WEEKS AHEAD)")
 
 x_limits <- c(-130, -65)  # Set the desired longitude range
 y_limits <- c(20, 55)    # Set the desired latitude range
@@ -492,7 +489,7 @@ MAP_WEEK2 + coord_sf(xlim = x_limits, ylim = y_limits)
 map_week3<-left_join(states, W3, by=join_by("NAME"))%>%
   drop_na()
 
-MAP_WEEK3<- ggplot(map_week3, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (3 WEEKS AHEAD)")
+MAP_WEEK3<- ggplot(map_week3, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (3 WEEKS AHEAD)")
 
 x_limits <- c(-130, -65)  # Set the desired longitude range
 y_limits <- c(20, 55)    # Set the desired latitude range
@@ -506,11 +503,40 @@ MAP_WEEK3 + coord_sf(xlim = x_limits, ylim = y_limits)
 map_week4<-left_join(states, W4, by=join_by("NAME"))%>%
   drop_na()
 
-MAP_WEEK4<- ggplot(map_week4, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log1p(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (4 WEEKS AHEAD)")
+MAP_WEEK4<- ggplot(map_week4, fill ="lightgrey") +  theme_light()  + geom_sf(aes(fill=log(ES27_ADJ))) +  scale_fill_distiller("log(WIS)", palette="Spectral") +  ggtitle("ES27 ARIMAX by ADJACENT STATES (4 WEEKS AHEAD)")
 
 x_limits <- c(-130, -65)  # Set the desired longitude range
 y_limits <- c(20, 55)    # Set the desired latitude range
 
 MAP_WEEK4 + coord_sf(xlim = x_limits, ylim = y_limits)  
+
+```
+
+```{r}
+ES27_ADJ_mean_wis_by_week<-data.frame("W1"= W1_$ES27_ADJ, "W2" = W2_$ES27_ADJ,"W3"= W3_$ES27_ADJ, "W4" = W4_$ES27_ADJ)
+
+# Convert to long format and add column number as ID
+long_data <- ES27_ADJ_mean_wis_by_week %>%
+  pivot_longer(
+    cols = everything(), 
+    names_to = "variable", 
+    values_to = "value"
+  ) %>%
+  mutate(id = as.integer(factor(variable, levels = names(ES27_ADJ_mean_wis_by_week))))
+
+# Print long format data
+print(long_data)
+
+means <- aggregate(value ~ id, data = long_data, FUN = mean)
+
+#-------------------------------------------------------------------------#
+ggplot(long_data, aes(x = value)) +
+  geom_histogram(binwidth = 8, fill = "blue", color = "black") +
+  geom_vline(data = means, aes(xintercept = value), color = "red", linetype = "dashed") +
+  facet_wrap(~ id, nrow = 2) +
+  labs(title = "ES27 ADJACENT STATES - WIS for 47 U.S. states by N weeks ahead",
+       x = "Weighted Interval Score (WIS)",
+       y = "Number of states")  +
+  theme_minimal()
 
 ```
