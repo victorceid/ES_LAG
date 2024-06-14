@@ -540,3 +540,67 @@ ggplot(long_data, aes(x = value)) +
   theme_minimal()
 
 ```
+
+
+MEAN OVERALL WIS IMPROVENT 
+
+```{r}
+
+mean_improved_WIS_W1<-data.frame("ES27_AR"=(W1[,2]-W1[,3]),"ES64_AR"=(W1[,2]-W1[,4]), "AUTO_ADJ"=(W1[,2]-W1[,5]), "ES27_ADJ"=(W1[,2]-W1[,6]),"ES64_ADJ"=(W1[,2]-W1[,7]), "AUTO_TMP"=(W1[,2]-W1[,8]), "ES27_TMP"=(W1[,2]-W1[,9]), "ES64_TMP"=(W1[,2]-W1[,10]),"AUTO_EPI"=(W1[,2]-W1[,11]),"ES27_EPI"=(W1[,2]-W1[,12]),"ES64_EPI"=(W1[,2]-W1[,13]))
+
+W1_imp<-colMeans(mean_improved_WIS_W1)
+
+barplot(W1_imp)
+##########################################################################
+
+mean_improved_WIS_W2<-data.frame("ES27_AR"=(W2[,2]-W2[,3]),"ES64_AR"=(W2[,2]-W2[,4]), "AUTO_ADJ"=(W2[,2]-W2[,5]), "ES27_ADJ"=(W2[,2]-W2[,6]),"ES64_ADJ"=(W2[,2]-W2[,7]), "AUTO_TMP"=(W2[,2]-W2[,8]), "ES27_TMP"=(W2[,2]-W2[,9]), "ES64_TMP"=(W2[,2]-W2[,10]),"AUTO_EPI"=(W2[,2]-W2[,11]),"ES27_EPI"=(W2[,2]-W2[,12]),"ES64_EPI"=(W2[,2]-W2[,13]))
+
+W2_imp<-colMeans(mean_improved_WIS_W2)
+
+barplot(W2_imp)
+
+##########################################################################
+
+mean_improved_WIS_W3<-data.frame("ES27_AR"=(W3[,2]-W3[,3]),"ES64_AR"=(W3[,2]-W3[,4]), "AUTO_ADJ"=(W3[,2]-W3[,5]), "ES27_ADJ"=(W3[,2]-W3[,6]),"ES64_ADJ"=(W3[,2]-W3[,7]), "AUTO_TMP"=(W3[,2]-W3[,8]), "ES27_TMP"=(W3[,2]-W3[,9]), "ES64_TMP"=(W3[,2]-W3[,10]),"AUTO_EPI"=(W3[,2]-W3[,11]),"ES27_EPI"=(W3[,2]-W3[,12]),"ES64_EPI"=(W3[,2]-W3[,13]))
+
+W3_imp<-colMeans(mean_improved_WIS_W3)
+
+barplot(W3_imp)
+
+##########################################################################
+
+mean_improved_WIS_W4<-data.frame("ES27_AR"=(W4[,2]-W4[,3]),"ES64_AR"=(W4[,2]-W4[,4]), "AUTO_ADJ"=(W4[,2]-W4[,5]), "ES27_ADJ"=(W4[,2]-W4[,6]),"ES64_ADJ"=(W4[,2]-W4[,7]), "AUTO_TMP"=(W4[,2]-W4[,8]), "ES27_TMP"=(W4[,2]-W4[,9]), "ES64_TMP"=(W4[,2]-W4[,10]),"AUTO_EPI"=(W4[,2]-W4[,11]),"ES27_EPI"=(W4[,2]-W4[,12]),"ES64_EPI"=(W4[,2]-W4[,13]))
+
+
+W4_imp<-colMeans(mean_improved_WIS_W4)
+
+barplot(W4_imp)
+```
+
+HEATMAP
+
+```{r}
+# Example matrix (replace with your actual matrix)
+heatmap_WIS_improv<-data.frame("W4"=W4_imp,"W3"=W3_imp,"W2"=W2_imp,"W1"=W1_imp)
+
+# Define custom colors
+custom_colors <- colorRampPalette(c("red", "white", "blue"))(256)
+
+# Define breaks centered on zero
+max_abs_value <- max(abs(heatmap_WIS_improv))
+breaks <- seq(-max_abs_value, max_abs_value, length.out = 257)  # 256 intervals, hence 257 breaks
+
+# Plot heatmap
+image.plot(as.matrix(heatmap_WIS_improv), 
+           col = custom_colors,
+           breaks = breaks,
+           legend.lab = "",
+           legend.args = list(text = "Intensity", side = 4, line = 2.5, cex = 2, adj = 0),
+           xaxt = "n", yaxt = "n"
+           ,main = "Mean Improved WIS compared to AUTO ARIMA")  # Suppress default axes
+
+# Add custom row and column labels
+axis(2, at = seq(0, 1, length.out = ncol(heatmap_WIS_improv)), labels = colnames(heatmap_WIS_improv), las = 2, cex.axis = 0.8)
+axis(1, at = seq(0, 1, length.out = nrow(heatmap_WIS_improv)), labels = rownames(heatmap_WIS_improv), las = 2, cex.axis = 0.8)
+
+```
